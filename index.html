@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Puzzle Game</title>
+    <style>
+      #canvasContainer {
+        position: relative;
+        width: 850px;
+        height: 450px;
+        border: 1px solid black;
+      }
+
+      .draggable {
+        position: absolute;
+        cursor: pointer;
+      }
+
+      .droppable {
+        position: absolute;
+        cursor: pointer;
+        background-color: lightblue;
+        border: 1px solid black;
+        padding: 10px;
+      }
+
+      #puzzleHeader {
+        font-size: 20px;
+        margin-bottom: 10px;
+      }
+      #puzzleCheck {
+        visibility: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div>
+      <div id="canvasContainer">
+        <!-- Draggable words will be dynamically added here -->
+      </div>
+    </div>
+    <div id="puzzleInputContainer">
+      <input type="text" id="puzzleName" placeholder="Enter puzzle name" />
+      <button id="getPuzzleButton" onclick="getPuzzle()">Get Puzzle</button>
+      <button onclick="solvePuzzle()" , id="puzzleCheckButton">
+        Solve Puzzle
+      </button>
+    </div>
+    <div id="puzzletitle"></div>
+    <div id="puzzleHeader"></div>
+    <div></div>
+
+    <script>
+      const canvasContainer = document.getElementById("canvasContainer");
+      const droppable = document.getElementById("droppable1");
+      const puzzleHeader = document.getElementById("puzzleHeader");
+      const puzzleInputContainer = document.getElementById(
+        "puzzleInputContainer"
+      );
+      let correctOrder = [];
+
+      droppable.addEventListener("dragover", function (event) {
+        event.preventDefault();
+        event.target.classList.add("drag-over");
+      });
+
+      droppable.addEventListener("dragleave", function (event) {
+        event.target.classList.remove("drag-over");
+      });
+
+      droppable.addEventListener("drop", function (event) {
+        event.preventDefault();
+        var id = event.dataTransfer.getData("text");
+        var draggableElement = document.getElementById(id);
+        event.target.appendChild(draggableElement);
+        event.target.classList.remove("drag-over");
+      });
+
+      function addWordToCanvas(word) {
+        const draggable = document.createElement("div");
+        draggable.textContent = word;
+        draggable.classList.add("draggable");
+        draggable.draggable = true;
+
+        // Randomize the position within the canvas boundaries
+        const randomX =
+          Math.random() * (canvasContainer.clientWidth - draggable.offsetWidth);
+        const randomY =
+          Math.random() *
+          (canvasContainer.clientHeight - draggable.offsetHeight);
+        draggable.style.left = randomX + "px";
+        draggable.style.top = randomY + "px";
+
+        // Generate a random color for the word
+        const randomColor =
+          "#" + Math.floor(Math.random() * 16777215).toString(16);
+        draggable.style.color = randomColor;
+
+        draggable.addEventListener("dragstart", function (event) {
+          event.dataTransfer.setData("text", event.target.id);
+          event.dataTransfer.setData("offsetX", event.offsetX);
+          event.dataTransfer.setData("offsetY", event.offsetY);
+        });
+
+        draggable.addEventListener("dragend", function (event) {
+          const draggableElement = event.target;
+          const offsetX = event.dataTransfer.getData("offsetX");
+          const offsetY = event.dataTransfer.getData("offsetY");
+          let newX =
+            event.clientX -
+            canvasContainer.getBoundingClientRect().left -
+            offsetX;
+          let newY =
+            event.clientY -
+            canvasContainer.getBoundingClientRect().top -
+            offsetY;
+
+          // Constrain dragging within the canvas boundaries
+          newX = Math.max(
+            0,
+            Math.min(
+              canvasContainer.clientWidth - draggableElement.offsetWidth,
+              newX
+            )
+          );
+          newY = Math.max(
+            0,
+            Math.min(
+              canvasContainer.clientHeight - draggableElement.offsetHeight,
+              newY
+            )
+          );
+
+          draggableElement.style.left = newX + "px";
+          draggableElement.style.top = newY + "px";
+        });
+
+        canvasContainer.appendChild(draggable);
+      }
+      function clearCanvas() {
+        while (canvasContainer.firstChild) {
+          canvasContainer.removeChild(canvasContainer.firstChild);
+        }
+      }
+
+      // Fetch puzzle data from the server
+      function getPuzzle() {
+        const puzzleName = document.getElementById("puzzleName").value;
+        fetch(`/getPuzzle?name=${puzzleName}`)
+          .then((response) => response.json())
+          .then((data) => {
+            correctOrder = data.puzzleText
+              .split(" ")
+              .map((word) => word.trim());
+            const puzzleWords = correctOrder.slice(); // Copy the correct order
+            puzzleWords.sort(() => Math.random() - 0.5); // Randomize the order
+            clearCanvas();
+            puzzleWords.forEach((word) => addWordToCanvas(word));
+            // puzzleHeader.textContent = `Puzzle: ${puzzleName}`;
+            puzzletitle.textContent = `Puzzle: ${puzzleName}`;
+            // puzzleInputContainer.style.display = "none"; // Hide the puzzle input container
+            puzzleCheck.style.visibility = "visible";
+          })
+          .catch((error) => console.error("Error fetching puzzle:", error));
+      }
+
+      function solvePuzzle() {
+        const draggableElements = Array.from(
+          canvasContainer.querySelectorAll(".draggable")
+        );
+        puzzleHeader.innerHTML = "";
+        // Sort draggable elements by their y-coordinate (top to bottom)
+        draggableElements.sort((a, b) => {
+          const rectA = a.getBoundingClientRect();
+          const rectB = b.getBoundingClientRect();
+          return rectA.top - rectB.top;
+        });
+
+        // Extract the text content of the draggable elements in the sorted order
+        const userOrder = draggableElements.map((elem) => elem.textContent);
+
+        // Determine the lines of text based on the vertical position
+        const lines = [];
+        let currentLine = [];
+        let prevY = draggableElements[0].getBoundingClientRect().top;
+        draggableElements.forEach((elem) => {
+          const rect = elem.getBoundingClientRect();
+          if (Math.abs(rect.top - prevY) > 5) {
+            lines.push(currentLine);
+            currentLine = [elem.textContent];
+          } else {
+            currentLine.push(elem.textContent);
+          }
+          prevY = rect.top;
+        });
+        lines.push(currentLine);
+
+        // Vertically align the words belonging to the same line
+        lines.forEach((line) => {
+          const lineText = line.join(" ");
+          const lineElement = document.createElement("div");
+          lineElement.textContent = lineText;
+          puzzleHeader.appendChild(lineElement);
+        });
+
+        // Compare the user's order with the correct order
+        let solved = true;
+        for (let i = 0; i < correctOrder.length; i++) {
+          if (userOrder[i] !== correctOrder[i]) {
+            solved = false;
+            break;
+          }
+        }
+
+        // Change the color of the text based on whether the solution is correct
+        puzzleHeader.style.color = solved ? "green" : "red";
+      }
+
+      document
+        .getElementById("getPuzzleButton")
+        .addEventListener("click", getPuzzle);
+      document
+        .getElementById("puzzleCheckButton")
+        .addEventListener("click", solvePuzzle);
+    </script>
+  </body>
+</html>
